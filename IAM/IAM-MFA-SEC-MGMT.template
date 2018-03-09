@@ -1,0 +1,507 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Provides the base-line for provisoning security, IAM, and access configuration for the AWS account. WARNING! The rSecAdminRole and IAM are inherently risky roles. rSecAdminRole is used to build the baseline of the Central Security Management account and manage AWS ORGS across multiple tenants. Access to this role to be limitted to a select group of Admins upon approval. After the central and tenant account have been provisoned you should consider removing additional permissions. Ensure the secHardening is attached to all non-rSecAdminRole roles and groups to prevent users disabling critical security controls. '
+Metadata:
+    Stack:
+        Value: 1
+    VersionDate:
+        Value: 20160510
+    Identifier:
+        Value: template-iam
+    Input:
+        Description: CloudTrail bucket name
+    Output:
+        Description: Outputs ID of all deployed resources
+Resources:
+    rSecAdminRole:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: rSecAdminRole
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser", "arn:aws:iam::aws:policy/AmazonS3FullAccess","arn:aws:iam::aws:policy/AWSSupportAccess","arn:aws:iam::aws:policy/AWSCodePipelineFullAccess"]
+            AssumeRolePolicyDocument:
+                Statement:
+                  - Effect: Allow
+                    Principal:
+                        Service:
+                          - codepipeline.amazonaws.com
+                          - cloudformation.amazonaws.com
+                    Action:
+                      - sts:AssumeRole
+    rSecAdminProfile:
+        Type: AWS::IAM::InstanceProfile
+        DependsOn: rSecAdminRole
+        Properties:
+            Path: /
+            Roles:
+              - !Ref rSecAdminRole
+    rSecAdmin:
+        Type: AWS::IAM::Group
+        Properties:
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser","arn:aws:iam::aws:policy/AmazonS3FullAccess","arn:aws:iam::aws:policy/AWSSupportAccess","arn:aws:iam::aws:policy/AWSCodePipelineFullAccess","arn:aws:iam::aws:policy/AmazonSNSFullAccess"]
+            Path: /
+    rSecAdminPolicy:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                  - Effect: Allow
+                    NotAction: iam:*
+                    Resource: '*'
+                    Condition:
+                        Bool:
+                           aws:MultiFactorAuthPresent: true
+                  - Effect: Deny
+                    Action: aws-portal:*Billing
+                    Resource: '*'
+                  - Effect: Deny
+                    Action:
+                      - cloudtrail:DeleteTrail
+                      - cloudtrail:StopLogging
+                    Resource: '*'
+                  - Effect: Allow
+                    Action:
+                      - kms:Create*
+                      - kms:CreateKey*
+                      - kms:Revoke*
+                      - kms:Describe*
+                      - kms:Enable*
+                      - kms:Get*
+                      - kms:List*
+                      - kms:Disable*
+                      - kms:Delete*
+                      - kms:Put*
+                      - kms:Update*
+                      - kms:TagResource*
+                      - kms:UnTagResource*
+                      - kms:ScheduleKeyDeletion*
+                      - kms:CancelKeyDeletion*
+                      - kms:ListAliases*
+                      - iam:ListRoles*
+                      - iam:ListUsers*
+                      - config:DescribeConfigRules
+                    Resource: '*'
+                    Condition:
+                        Bool:
+                           aws:MultiFactorAuthPresent: true
+    rAWSOrganizationAdminPolicy:
+        Type: "AWS::IAM::Policy"
+        Properties: 
+            PolicyName: "rAWSOrganizationAdminPolicy"
+            PolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - 
+                    Effect: Allow
+                    Action: 
+                      - organizations:Accept*
+                      - organizations:Attach*
+                      - organizations:Cancel*
+                      - organizations:Create*
+                      - organizations:Decline*
+                      - organizations:Delete*
+                      - organizations:Describe*
+                      - organizations:Detach*
+                      - organizations:DisableAWSServiceAccess
+                      - organizations:DisablePolicyType
+                      - organizations:Enable*
+                      - organizations:Invite*
+                      - organizations:List*
+                      - organizations:Move*
+                      - organizations:Remove*
+                      - organizations:UpdateOrganizationalUnit
+                      - organizations:UpdatePolicy
+                    Resource: "*"
+                    Condition:
+                        Bool:
+                           aws:MultiFactorAuthPresent: true
+            Roles:
+                - !Ref rSecAdminRole
+            Groups:
+                - !Ref rSecAdmin
+    rCloudFormationAdminPolicy:
+        Type: "AWS::IAM::Policy"
+        Properties: 
+            PolicyName: "rCloudFormationAdminPolicy"
+            PolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - 
+                    Effect: "Allow"
+                    Action: "cloudformation:*"
+                    Resource: "*"
+                    Condition:
+                        Bool:
+                           aws:MultiFactorAuthPresent: true
+            Roles:
+                - !Ref rSecAdminRole
+            Groups:
+                - !Ref rSecAdmin  
+    rIAMAdminGroup:
+        Type: AWS::IAM::Group
+        Properties:
+            GroupName: rIAMAdminGroup
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/AWSSupportAccess"]
+            Path: /
+    rIAMAdminRole:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: rIAMAdminRole
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/AWSSupportAccess"]
+            AssumeRolePolicyDocument:
+                Statement:
+                  - Effect: Allow
+                    Principal:
+                        Service:
+                          - iam.amazonaws.com
+                    Action:
+                      - sts:AssumeRole
+    rIAMAdminProfile:
+        Type: AWS::IAM::InstanceProfile
+        DependsOn: rIAMAdminRole
+        Properties:
+            Path: /
+            Roles:
+              - !Ref rIAMAdminRole
+    rIAMAdminPolicy:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                  - Effect: Allow
+                    Action: 
+                      - iam:Add*
+                      - iam:Attach*
+                      - iam:Change*
+                      - iam:Create*
+                      - iam:DeactivateMFADevice
+                      - iam:Delete*
+                      - iam:DeleteVirtualMFADevice
+                      - iam:Detach*
+                      - iam:Detach*
+                      - iam:EnableMFADevice
+                      - iam:GenerateCredentialReport
+                      - iam:Get*
+                      - iam:List*
+                      - iam:Put*
+                      - iam:RemoveClientIDFromOpenIDConnectProvider
+                      - iam:RemoveRoleFromInstanceProfile
+                      - iam:RemoveUserFromGroup
+                      - iam:ResetServiceSpecificCredential
+                      - iam:ResyncMFADevice
+                      - iam:SetDefaultPolicyVersion
+                      - iam:SimulateCustomPolicy
+                      - iam:SimulatePrincipalPolicy
+                      - iam:Update*
+                      - iam:UploadServerCertificate
+                      - iam:UploadSigningCertificate
+                      - iam:UploadSSHPublicKey
+                    Resource: 'arn:aws:iam::<YOUR ACCOUNT ID>:*'
+                    Condition:
+                        Bool:
+                            aws:MultiFactorAuthPresent: true
+                  - Effect: Deny
+                    Action: 
+                      - aws-portal:*Billing*
+                    Resource: '*'  
+            Roles:
+              - !Ref rIAMAdminRole
+            Groups:
+              - !Ref rIAMAdminGroup
+    rReadOnlyAdminGroup:
+        Type: AWS::IAM::Group
+        Properties:
+            GroupName: rReadOnlyAdminGroup
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/AWSSupportAccess"]
+            Path: /
+    rReadOnlyAdminRole:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: rReadOnlyAdminRole
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/AWSSupportAccess"]
+            AssumeRolePolicyDocument:
+                Statement:
+                  - Effect: Allow
+                    Principal:
+                        Service:
+                          - ec2.amazonaws.com
+                    Action:
+                      - sts:AssumeRole
+    rReadOnlyAdminProfile:
+        Type: AWS::IAM::InstanceProfile
+        DependsOn: rReadOnlyAdminRole
+        Properties:
+            Path: /
+            Roles:
+              - !Ref rReadOnlyAdminRole
+    rReadOnlyAdminPolicy:
+        Type: AWS::IAM::ManagedPolicy
+        DependsOn: rReadOnlyAdminProfile
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                  - Action:
+                      - appstream:Get*
+                      - autoscaling:Describe*
+                      - cloudformation:DescribeStacks
+                      - cloudformation:DescribeStackEvents
+                      - cloudformation:DescribeStackResource
+                      - cloudformation:DescribeStackResources
+                      - cloudformation:GetTemplate
+                      - cloudformation:List*
+                      - cloudfront:Get*
+                      - cloudfront:List*
+                      - cloudtrail:DescribeTrails
+                      - cloudtrail:GetTrailStatus
+                      - cloudwatch:Describe*
+                      - cloudwatch:Get*
+                      - cloudwatch:List*
+                      - directconnect:Describe*
+                      - dynamodb:GetItem
+                      - dynamodb:BatchGetItem
+                      - dynamodb:Query
+                      - dynamodb:Scan
+                      - dynamodb:DescribeTable
+                      - dynamodb:ListTables
+                      - ec2:Describe*
+                      - elasticache:Describe*
+                      - elasticbeanstalk:Check*
+                      - elasticbeanstalk:Describe*
+                      - elasticbeanstalk:List*
+                      - elasticbeanstalk:RequestEnvironmentInfo
+                      - elasticbeanstalk:RetrieveEnvironmentInfo
+                      - elasticloadbalancing:Describe*
+                      - elastictranscoder:Read*
+                      - elastictranscoder:List*
+                      - iam:List*
+                      - iam:Get*
+                      - kinesis:Describe*
+                      - kinesis:Get*
+                      - kinesis:List*
+                      - opsworks:Describe*
+                      - opsworks:Get*
+                      - route53:Get*
+                      - route53:List*
+                      - redshift:Describe*
+                      - redshift:ViewQueriesInConsole
+                      - rds:Describe*
+                      - rds:ListTagsForResource
+                      - s3:Get*
+                      - s3:List*
+                      - sdb:GetAttributes
+                      - sdb:List*
+                      - sdb:Select*
+                      - ses:Get*
+                      - ses:List*
+                      - sns:Get*
+                      - sns:List*
+                      - sqs:GetQueueAttributes
+                      - sqs:ListQueues
+                      - sqs:ReceiveMessage
+                      - storagegateway:List*
+                      - storagegateway:Describe*
+                      - trustedadvisor:Describe*
+                    Effect: Allow
+                    Resource: '*'
+                    Condition:
+                        Bool:
+                           aws:MultiFactorAuthPresent: true
+                  - Effect: Deny
+                    Action: aws-portal:*Billing
+                    Resource: '*'
+            Roles:
+              - !Ref rReadOnlyAdminRole
+            Groups:
+              - !Ref rReadOnlyAdminGroup
+    rReadOnlyBillingGroup:
+        Type: AWS::IAM::Group
+        Properties:
+            GroupName: rReadOnlyBillingGroup
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/AWSSupportAccess"]
+            Path: /
+    rReadOnlyBillingPolicy:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                  - Effect: Allow
+                    Action: 
+                      - aws-portal:View*
+                      - aws-portal:ViewAccount
+                      - aws-portal:ViewBilling
+                      - aws-portal:ViewUsage
+                    Resource: '*'
+                    Condition:
+                        Bool:
+                           aws:MultiFactorAuthPresent: true
+                  - Effect: Deny
+                    Action: 
+                      - aws-portal:Modify*
+                    Resource: '*'
+            Groups:
+              - !Ref rReadOnlyBillingGroup
+    rNetworkAdminRole:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: rSecAdminRole
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/job-function/NetworkAdministrator"]
+            AssumeRolePolicyDocument:
+                Statement:
+                  - Effect: Allow
+                    Principal:
+                        Service:
+                          - ec2.amazonaws.com
+                    Action:
+                      - sts:AssumeRole
+    rNetworkAdminProfile:
+        Type: AWS::IAM::InstanceProfile
+        DependsOn: rNetworkAdminRole
+        Properties:
+            Path: /
+            Roles:
+              - !Ref rNetworkAdminRole
+    rNetworkAdminGroup:
+        Type: AWS::IAM::Group
+        Properties:
+            ManagedPolicyArns: ["arn:aws:iam::aws:policy/job-function/NetworkAdministrator"]
+            Path: /
+    
+    
+    rSecHardeningPolicyDevOps:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:                      
+                  - Effect: Deny
+                    Action: iam:*PasswordPolicy*
+                    Resource: '*'
+                  - Effect: Deny
+                    Action:
+                      - iam:*
+                    Resource: ['arn:aws:iam::<YOUR ACCOUNT ID>:role/*cis-config-pipeline*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*central-iam-mfa-admins*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*nist-config-pipeline*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*central-iam-policy*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*cloud-trail-pipeline*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*pw-policy-pipleline*']
+                  - Effect: Deny
+                    Action:
+                      - config:*
+                    Resource: ['arn:aws:config:<YOUR REGION>:<YOUR ACCOUNT ID>:config-rule/*CIS-*','arn:aws:config:<YOUR REGION>:<YOUR ACCOUNT ID>:config-rule/*cloudtrail-is-enabled*','arn:aws:config:<YOUR REGION>:<YOUR ACCOUNT ID>:config-rule/*unrestricted-ssh-access*']
+                  - Effect: Deny
+                    Action:
+                      - codepipline:*
+                    Resource: ['arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*cis-config-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*mfa-roles-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*nist-config-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*pw-policy-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*cloud-trail-pipeline*']
+                  - Effect: Deny
+                    Action:
+                      - events:*
+                    Resource: ['arn:aws:events:<YOUR REGION>:<YOUR ACCOUNT ID>:rule/*CIS-*']
+                  - Effect: Deny
+                    Action:
+                      - events:*
+                    Resource: ['arn:aws:cloudwatch:<YOUR REGION>:*:alarm:/*CIS-*', 'arn:aws:cloudwatch:<YOUR REGION>:*:alarm:/*GuardDutyPublish*']
+                    
+                  - Effect: Deny
+                    Action:
+                      - lambda:*
+                    Resource: ['arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*CIS-*','arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*CIS-*','arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*iam-policy*','arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*GuardDutyPublish'] 
+                  - Effect: Deny
+                    Action:
+                      - cloudformation:*
+                    Resource: ['arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*cis-config*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*mfa-roles*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*pw-policy*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*cloud-trail-pipeline*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*nist-config*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*guard-duty-pipeline*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*VPC-Flow-Logs','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*secNetflows*']
+                  - Effect: Deny
+                    Action:
+                      - SNS:*
+                    Resource: ['arn:aws:sns:<YOUR REGION>:<YOUR ACCOUNT ID>:*CIS-NotificationTopic*','arn:aws:sns:<YOUR REGION>:<YOUR ACCOUNT ID>:*secSnsTopic*']
+                  - Effect: Deny
+                    Action:
+                      - guardduty:*
+                    Resource: ['*']
+                  - Effect: Deny
+                    Action:
+                      - inspector:*
+                    Resource: ['*']
+                  - Effect: Deny
+                    Action:
+                      - vpc:*
+                    Resource: ['*']
+                  - Effect: Deny
+                    Action: s3:*
+                    Resource: ['arn:aws:s3:::<YOUR NEW BUCKET NAME>']
+            Roles:
+              - !Ref rIAMAdminRole 
+              - !Ref rReadOnlyAdminRole 
+              - !Ref rReadOnlyAdminRole
+
+            Groups:
+              - !Ref rIAMAdminGroup
+              - !Ref rReadOnlyBillingGroup
+              - !Ref rReadOnlyAdminGroup
+              
+    rSecHardeningPolicyNetwork:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:                      
+                  - Effect: Deny
+                    Action: iam:*PasswordPolicy*
+                    Resource: '*'
+                  - Effect: Deny
+                    Action:
+                      - iam:*
+                    Resource: ['arn:aws:iam::<YOUR ACCOUNT ID>:role/*cis-config-pipeline*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*central-iam-mfa-admins*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*nist-config-pipeline*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*central-iam-policy*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*cloud-trail-pipeline*','arn:aws:iam::<YOUR ACCOUNT ID>:role/*pw-policy-pipleline*']
+                  - Effect: Deny
+                    Action:
+                      - config:*
+                    Resource: ['arn:aws:config:<YOUR REGION>:<YOUR ACCOUNT ID>:config-rule/*CIS-*','arn:aws:config:<YOUR REGION>:<YOUR ACCOUNT ID>:config-rule/*cloudtrail-is-enabled*','arn:aws:config:<YOUR REGION>:<YOUR ACCOUNT ID>:config-rule/*unrestricted-ssh-access*']
+                  - Effect: Deny
+                    Action:
+                      - codepipline:*
+                    Resource: ['arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*cis-config-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*mfa-roles-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*nist-config-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*pw-policy-pipeline*','arn:aws:codepipeline:<YOUR REGION>:<YOUR ACCOUNT ID>:*cloud-trail-pipeline*']
+                  - Effect: Deny
+                    Action:
+                      - events:*
+                    Resource: ['arn:aws:events:<YOUR REGION>:<YOUR ACCOUNT ID>:rule/*CIS-*']
+                  - Effect: Deny
+                    Action:
+                      - events:*
+                    Resource: ['arn:aws:cloudwatch:<YOUR REGION>:*:alarm:/*CIS-*', 'arn:aws:cloudwatch:<YOUR REGION>:*:alarm:/*GuardDutyPublish*']
+                    
+                  - Effect: Deny
+                    Action:
+                      - lambda:*
+                    Resource: ['arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*CIS-*','arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*CIS-*','arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*iam-policy*','arn:aws:lambda:<YOUR REGION>:<YOUR ACCOUNT ID>:function:*GuardDutyPublish'] 
+                  - Effect: Deny
+                    Action:
+                      - cloudformation:*
+                    Resource: ['arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*cis-config*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*mfa-roles*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*pw-policy*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*cloud-trail-pipeline*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*nist-config*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*guard-duty-pipeline*','arn:aws:cloudformation:<YOUR REGION>:<YOUR ACCOUNT ID>:stack/*VPC-Flow-Logs']
+                  - Effect: Deny
+                    Action:
+                      - SNS:*
+                    Resource: ['arn:aws:sns:<YOUR REGION>:<YOUR ACCOUNT ID>:*CIS-NotificationTopic*','arn:aws:sns:<YOUR REGION>:<YOUR ACCOUNT ID>:*secSnsTopic*']
+                  - Effect: Deny
+                    Action:
+                      - guardduty:*
+                    Resource: ['*']
+                  - Effect: Deny
+                    Action:
+                      - inspector:*
+                    Resource: ['*']
+                  - Effect: Deny
+                    Action: s3:*
+                    Resource: ['arn:aws:s3:::<YOUR NEW BUCKET NAME>']
+
+            Roles:
+              - !Ref rNetworkAdminRole 
+
+            Groups:
+              - !Ref rNetworkAdminGroup
+              
+Outputs:
+    rSecAdmin:
+        Value: !Ref rSecAdmin
+    rIAMAdminGroup:
+        Value: !Ref rIAMAdminGroup
+    rReadOnlyBillingGroup:
+        Value: !Ref rReadOnlyBillingGroup
+    rReadOnlyAdminGroup:
+        Value: !Ref rReadOnlyAdminGroup
