@@ -28,7 +28,7 @@
       "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
     },
     "PublicSubnet1": {
-      "Description": "The first public subnet where the Jenkins EC2 instance, ELB and CodeDeploy Web Servers will be launched",
+      "Description": "The  subnet where the Jenkins EC2 instance, ELB will be launched",
       "Type": "AWS::EC2::Subnet::Id",
       "ConstraintDescription": "Must be a valid Public VPC Subnet."
     }
@@ -79,7 +79,6 @@
       "sa-east-1"       : { "PV64": "ami-fd9925e0", "HVM64": "ami-b52890a8" }
     }
   },
-
   "Resources": {
     "JenkinsServer": {
       "Type": "AWS::EC2::Instance",
@@ -95,14 +94,12 @@
                 "git": []
               }
             }          },
-
           "install_nginx": {
             "packages": {
               "yum": {
                 "nginx": []
               }
             },
-
             "files": {
               "/etc/nginx/nginx.conf": {
                 "content": {
@@ -190,8 +187,7 @@
           "Fn::Base64": {
             "Fn::Join": ["", [
               "#!/bin/bash -xe\n",
-              "yum update -y aws-cfn-bootstrap\n",
-
+              "sudo yum update -y aws-cfn-bootstrap\n",
               "/opt/aws/bin/cfn-init -v ",
               " --stack ", {
                 "Ref": "AWS::StackName"
@@ -201,14 +197,15 @@
               " --region ", {
                 "Ref": "AWS::Region"
               }, "\n",
-
               "# Install Jenkins\n",
+              "sudo yum remove jre-1.7.0 -y\n",
+              "sudo yum install java-1.8.0-openjdk-devel -y\n", 
               "wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat/jenkins.repo\n",
               "rpm --import http://pkg.jenkins-ci.org/redhat/jenkins-ci.org.key\n",
-              "yum install -y jenkins\n",
+              "sudo yum install -y jenkins\n",
 
-              "service jenkins start\n",
-              "chkconfig jenkins on\n",
+              "sudo service jenkins start\n",
+              "sudo chkconfig jenkins on\n",
 
               "# Update the AWS CLI to the latest version\n",
               "yum update -y aws-cli\n",
@@ -229,7 +226,7 @@
               "chown jenkins:jenkins *.hpi\n",
 
               "# Restarting Jenkins\n",
-              "service jenkins restart\n",
+              "sudo service jenkins restart\n",
 
               "# Configure AWS CLI and GIT for jenkins user\n",
               "su - jenkins --shell /bin/bash -c \"aws configure set region us-east-1\" \n",
@@ -267,8 +264,8 @@
           "IpProtocol": "tcp",
           "FromPort": "80",
           "ToPort": "80",
-          "CidrIp": {
-            "Ref": "YourIPRange"
+          "SourceSecurityGroupId" :{
+            "Ref": "ELBSG"
           }
         }]
       }
@@ -296,6 +293,7 @@
       "Properties" : {
         "Path" : "/",
         "ManagedPolicyArns" : [
+          "arn:aws:iam::aws:policy/service-role/AmazonSNSRole",
           "arn:aws:iam::aws:policy/AWSCodePipelineCustomActionAccess",
           "arn:aws:iam::aws:policy/AWSCodeCommitReadOnly",
           "arn:aws:iam::aws:policy/AWSCodeCommitPowerUser"
@@ -474,11 +472,12 @@
       "Properties" : {
         "HealthCheck" : {
           "HealthyThreshold" : "2",
-          "Interval" : "30",
-          "Target" : "HTTP:80/",
+          "Interval" : "10",
+          "Target" : "TCP:80",
           "Timeout" : "5",
           "UnhealthyThreshold" : "5"
         },
+        "Instances" : [ { "Ref" : "JenkinsServer" }],
         "Listeners" : [ {
           "InstancePort" : "80",
           "LoadBalancerPort" : "80",
@@ -508,18 +507,6 @@
         "Fn::GetAtt" : [ "JenkinsServer", "PublicDnsName" ]
       }
     },
-    "CodeDeployApplicationName" : {
-      "Description" : "CodeDeploy Application Name",
-      "Value" : {
-        "Ref" : "DemoApplication"
-      }
-    },
-    "CodeDeployDeploymentGroup" : {
-      "Description" : "CodeDeploy Deployment Group Name",
-      "Value" : {
-        "Ref" : "DemoFleet"
-      }
-    },
     "S3BucketName" : {
       "Description" : "S3 Bucket Name",
       "Value" : {
@@ -534,4 +521,3 @@
     }
   }
 }
-
